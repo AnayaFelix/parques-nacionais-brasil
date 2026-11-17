@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parques Nacionais do Brasil - Mapa Interativo</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Pulse Animation for Map Markers - FIXED ANCHORING */
+        .ponto-piscando-container {
+            width: 14px !important;
+            height: 14px !important;
+            margin-left: -7px !important;
+            margin-top: -7px !important;
+        }
+
+        .ponto-piscando {
+            background-color: #2e7d32;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 0 10px rgba(46, 125, 50, 0.8);
+            box-sizing: border-box;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        /* Continuous Pulse Aura (Radar / Sonar Effect) centered properly */
+        .ponto-piscando::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 24px;
+            height: 24px;
+            margin-top: -12px;
+            margin-left: -12px;
+            border-radius: 50%;
+            background-color: rgba(46, 125, 50, 0.6);
+            animation: aura-pulso 1.8s infinite ease-out;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .ponto-piscando:hover {
+            transform: scale(1.35);
+            background-color: #1b5e20;
+        }
+
+        .ponto-piscando.destaque {
+            background-color: #eab308;
+            border-color: #ffffff;
+            box-shadow: 0 0 14px rgba(234, 179, 8, 0.9);
+            transform: scale(1.3);
+            z-index: 1000 !important;
+        }
+
+        .ponto-piscando.destaque::after {
+            background-color: rgba(234, 179, 8, 0.7);
+            animation: aura-pulso 1.2s infinite ease-out;
+            width: 32px;
+            height: 32px;
+            margin-top: -16px;
+            margin-left: -16px;
+        }
+
+        @keyframes aura-pulso {
+            0% {
+                transform: scale(0.3);
+                opacity: 0.95;
+            }
+            100% {
+                transform: scale(1.8);
+                opacity: 0;
+            }
+        }
+
+        /* Leaflet Custom Popup Styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 4px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 12px 16px;
+            line-height: 1.5;
+        }
+
+        /* Tooltip Custom Style */
+        .custom-tooltip {
+            background-color: #1b5e20;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .custom-tooltip::before {
+            border-top-color: #1b5e20 !important;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Transition for drawer */
+        .sidebar-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- HEADER -->
+    <header class="bg-emerald-800 text-white shadow-lg z-20 flex-shrink-0">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3 text-center sm:text-left">
+                <div class="bg-emerald-700 p-2.5 rounded-xl shadow-inner border border-emerald-600">
+                    <i class="fa-solid me-0 fa-tree text-2xl text-emerald-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Parques Nacionais do Brasil</h1>
+                    <p class="text-xs sm:text-sm text-emerald-200 font-medium">Projeto de Extensão e Cultura UFABC</p>
+                </div>
+            </div>
+
+            <!-- Header Stats Badges -->
+            <div class="flex items-center gap-3 text-xs sm:text-sm font-medium">
+                <div class="bg-emerald-900/60 backdrop-blur border border-emerald-700/50 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                    <i class="fa-solid fa-map-pin text-emerald-400"></i>
+                    <span>Exibindo: <strong id="stat-count" class="text-emerald-300">75</strong> / 75</span>
+                </div>
+                <button id="btn-reset-map" onclick="resetMapView()" class="bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white px-3 py-1.5 rounded-lg transition border border-emerald-600 flex items-center gap-1.5 shadow-sm text-xs" title="Centralizar Mapa no Brasil">
+                    <i class="fa-solid fa-globe"></i>
+                    <span class="hidden md:inline">Visão Geral</span>
+                </button>
+                <button id="btn-toggle-sidebar" onclick="toggleSidebar()" class="lg:hidden bg-emerald-700 hover:bg-emerald-600 text-white p-2 rounded-lg border border-emerald-600" title="Alternar Painel">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINING MAP & SIDEBAR -->
+    <div class="flex-1 flex relative overflow-hidden">
+
+        <!-- SIDEBAR / PAINEL LATERAL -->
+        <aside id="sidebar" class="absolute lg:relative z-10 w-full sm:w-80 md:w-96 h-full bg-white shadow-xl flex flex-col sidebar-transition -translate-x-full lg:translate-x-0">
+            
+            <!-- Sidebar Controls -->
+            <div class="p-4 bg-slate-50 border-b border-slate-200 flex-shrink-0 space-y-3">
+                <!-- Search Box -->
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="search-input" onkeyup="filterParques()" placeholder="Buscar parque ou estado (ex: Chapada, RS)..." 
+                           class="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm">
+                    <button id="btn-clear-search" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Region Filter Chips -->
+                <div>
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Regiões</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button onclick="setRegionFilter('TODAS')" class="region-btn active text-xs px-2.5 py-1 rounded-md border font-medium transition bg-emerald-700 text-white border-emerald-700">Todas</button>
+                        <button onclick="setRegionFilter('Norte')" class="region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100">Norte</button>
+                        <button onclick="setRegionFilter('Nordeste')" class="region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100">Nordeste</button>
+                        <button onclick="setRegionFilter('Centro-Oeste')" class="region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100">C.Oeste</button>
+                        <button onclick="setRegionFilter('Sudeste')" class="region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100">Sudeste</button>
+                        <button onclick="setRegionFilter('Sul')" class="region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100">Sul</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List Header -->
+            <div class="px-4 py-2 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs font-semibold text-slate-500">
+                <span>LISTA DE PARQUES</span>
+                <span id="list-count-badge" class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">75</span>
+            </div>
+
+            <!-- Parks Scrollable List -->
+            <div id="parks-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+                <!-- Javascript will insert cards here dynamically -->
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="p-3 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500 flex-shrink-0">
+                <a href="https://parquesnacionaisinterculturais.ning.com/" target="_blank" class="text-emerald-700 hover:underline font-medium inline-flex items-center gap-1">
+                    <span>Comunidade Parques Nacionais</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- MAP CANVAS -->
+        <main class="flex-1 h-full w-full relative">
+            <div id="map" class="h-full w-full z-0"></div>
+
+            <!-- Floating Map Layer & Controls -->
+            <div class="absolute top-4 right-4 z-[500] flex flex-col gap-2">
+                <button onclick="toggleTileLayer()" class="bg-white hover:bg-slate-50 text-slate-700 p-2.5 rounded-lg shadow-md border border-slate-200 text-xs font-medium flex items-center gap-2 transition" title="Mudar estilo de mapa">
+                    <i class="fa-solid fa-layer-group text-emerald-600"></i>
+                    <span class="hidden sm:inline" id="layer-btn-text">Visão Satélite</span>
+                </button>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // 1. DADOS COMPLETOS DOS 75 PARQUES NACIONAIS (Atualizados com coordenadas e Hectares)
+        const parques = [
+            { id: 1, nome: "P.N. do Albardão", uf: "RS", regiao: "Sul", lat: -33.2025, lng: -52.7061, hectares: "1.004.480 ha" },
+            { id: 2, nome: "P.N. Cavernas do Peruaçu", uf: "MG", regiao: "Sudeste", lat: -15.1778, lng: -44.3739, hectares: "56.448 ha" },
+            { id: 3, nome: "P.N. da Amazônia", uf: "AM", regiao: "Norte", lat: -4.2772, lng: -55.9942, hectares: "1.066.288 ha" },
+            { id: 4, nome: "P.N. da Chapada das Mesas", uf: "MA", regiao: "Nordeste", lat: -7.3336, lng: -47.4614, hectares: "159.951 ha" },
+            { id: 5, nome: "P.N. da Chapada Diamantina", uf: "BA", regiao: "Nordeste", lat: -12.5625, lng: -41.3889, hectares: "152.141 ha" },
+            { id: 6, nome: "P.N. da Chapada dos Guimarães", uf: "MT", regiao: "Centro-Oeste", lat: -15.4089, lng: -55.8322, hectares: "32.647 ha" },
+            { id: 7, nome: "P.N. da Chapada dos Veadeiros", uf: "GO", regiao: "Centro-Oeste", lat: -14.1681, lng: -47.8167, hectares: "240.611 ha" },
+            { id: 8, nome: "P.N. da Furna Feia", uf: "RN", regiao: "Nordeste", lat: -5.1956, lng: -37.3364, hectares: "8.494 ha" },
+            { id: 9, nome: "P.N. da Lagoa do Peixe", uf: "RS", regiao: "Sul", lat: -31.3167, lng: -51.0167, hectares: "36.722 ha" },
+            { id: 10, nome: "P.N. da Restinga de Jurubatiba", uf: "RJ", regiao: "Sudeste", lat: -22.3036, lng: -41.6956, hectares: "14.919 ha" },
+            { id: 11, nome: "P.N. da Serra da Bocaina", uf: "SP/RJ", regiao: "Sudeste", lat: -22.6461, lng: -44.5786, hectares: "106.564 ha" },
+            { id: 12, nome: "P.N. da Serra da Bodoquena", uf: "MS", regiao: "Centro-Oeste", lat: -21.1231, lng: -56.5006, hectares: "77.021 ha" },
+            { id: 13, nome: "P.N. da Serra da Canastra", uf: "MG", regiao: "Sudeste", lat: -20.2606, lng: -46.4100, hectares: "197.810 ha" },
+            { id: 14, nome: "P.N. da Serra da Capivara", uf: "PI", regiao: "Nordeste", lat: -8.8364, lng: -42.5553, hectares: "129.139 ha" },
+            { id: 15, nome: "P.N. Serra da Cutia", uf: "RO", regiao: "Norte", lat: -10.7697, lng: -65.3211, hectares: "283.612 ha" },
+            { id: 16, nome: "P.N. da Serra das Confusões", uf: "PI", regiao: "Nordeste", lat: -9.2817, lng: -43.3331, hectares: "916.155 ha" },
+            { id: 17, nome: "P.N. da Serra das Lontras", uf: "BA", regiao: "Nordeste", lat: -14.7978, lng: -39.0372, hectares: "11.344 ha" },
+            { id: 18, nome: "P.N. da Serra do Cipó", uf: "MG", regiao: "Sudeste", lat: -19.3000, lng: -43.6000, hectares: "31.623 ha" },
+            { id: 19, nome: "P.N. da Serra do Divisor", uf: "AC", regiao: "Norte", lat: -7.6214, lng: -72.6700, hectares: "837.554 ha" },
+            { id: 20, nome: "P.N. da Serra do Gandarela", uf: "MG", regiao: "Sudeste", lat: -20.0000, lng: -43.6000, hectares: "31.270 ha" },
+            { id: 21, nome: "P.N. da Serra do Itajaí", uf: "SC", regiao: "Sul", lat: -26.9167, lng: -49.0667, hectares: "57.374 ha" },
+            { id: 22, nome: "P.N. da Serra do Pardo", uf: "PA", regiao: "Norte", lat: -5.7667, lng: -52.8333, hectares: "445.392 ha" },
+            { id: 23, nome: "P.N. da Serra do Teixeira", uf: "PB", regiao: "Nordeste", lat: -7.2492, lng: -37.2497, hectares: "61.095 ha" },
+            { id: 24, nome: "P.N. da Serra dos Órgãos", uf: "RJ", regiao: "Sudeste", lat: -22.4481, lng: -42.9831, hectares: "20.024 ha" },
+            { id: 25, nome: "P.N. da Serra Geral", uf: "SC/RS", regiao: "Sul", lat: -29.1339, lng: -49.9944, hectares: "17.274 ha" },
+            { id: 26, nome: "P.N. da Tijuca", uf: "RJ", regiao: "Sudeste", lat: -22.9583, lng: -43.2500, hectares: "3.958 ha" },
+            { id: 27, nome: "P.N. das Araucárias", uf: "SC", regiao: "Sul", lat: -26.4833, lng: -51.9833, hectares: "12.809 ha" },
+            { id: 28, nome: "P.N. das Emas", uf: "GO", regiao: "Centro-Oeste", lat: -18.1064, lng: -52.9278, hectares: "132.787 ha" },
+            { id: 29, nome: "P.N. das Nascentes do Rio Parnaíba", uf: "MA/PI/BA/TO", regiao: "Nordeste", lat: -10.4428, lng: -45.1614, hectares: "749.848 ha" },
+            { id: 30, nome: "P.N. das Sempre-Vivas", uf: "MG", regiao: "Sudeste", lat: -18.2447, lng: -43.6000, hectares: "124.154 ha" },
+            { id: 31, nome: "P.N. de Anavilhanas", uf: "AM", regiao: "Norte", lat: -2.3947, lng: -60.9206, hectares: "350.469 ha" },
+            { id: 32, nome: "P.N. de Aparados da Serra", uf: "SC/RS", regiao: "Sul", lat: -29.1917, lng: -50.0975, hectares: "13.141 ha" },
+            { id: 33, nome: "P.N. de Boa Nova", uf: "BA", regiao: "Nordeste", lat: -14.3628, lng: -40.2078, hectares: "12.065 ha" },
+            { id: 34, nome: "P.N. de Brasília", uf: "DF", regiao: "Centro-Oeste", lat: -15.7311, lng: -47.9228, hectares: "42.355 ha" },
+            { id: 35, nome: "P.N. de Ilha Grande", uf: "MS/PR", regiao: "Sul", lat: -23.6975, lng: -54.0097, hectares: "78.875 ha" },
+            { id: 36, nome: "P.N. de Itatiaia", uf: "RJ/MG", regiao: "Sudeste", lat: -22.4514, lng: -44.5903, hectares: "28.084 ha" },
+            { id: 37, nome: "P.N. de Jericoacoara", uf: "CE", regiao: "Nordeste", lat: -2.7911, lng: -40.5064, hectares: "8.863 ha" },
+            { id: 38, nome: "P.N. de Pacaás Novos", uf: "RO", regiao: "Norte", lat: -10.5833, lng: -63.6167, hectares: "764.801 ha" },
+            { id: 39, nome: "P.N. de Saint-Hilaire-Lange", uf: "PR", regiao: "Sul", lat: -25.8167, lng: -48.5333, hectares: "24.500 ha" },
+            { id: 40, nome: "P.N. de São Joaquim", uf: "SC", regiao: "Sul", lat: -28.1344, lng: -49.4797, hectares: "49.800 ha" },
+            { id: 41, nome: "P.N. de Sete Cidades", uf: "PI", regiao: "Nordeste", lat: -4.1667, lng: -41.6250, hectares: "6.221 ha" },
+            { id: 42, nome: "P.N. de Ubajara", uf: "CE", regiao: "Nordeste", lat: -3.7664, lng: -40.8981, hectares: "6.288 ha" },
+            { id: 43, nome: "P.N. do Descobrimento", uf: "BA", regiao: "Nordeste", lat: -17.3333, lng: -39.2167, hectares: "22.693 ha" },
+            { id: 44, nome: "P.N. do Acari", uf: "AM", regiao: "Norte", lat: -6.2000, lng: -59.0000, hectares: "896.408 ha" },
+            { id: 45, nome: "P.N. do Alto Cariri", uf: "BA", regiao: "Nordeste", lat: -16.5833, lng: -40.0000, hectares: "19.238 ha" },
+            { id: 46, nome: "P.N. do Araguaia", uf: "TO", regiao: "Norte", lat: -10.5167, lng: -49.9333, hectares: "555.517 ha" },
+            { id: 47, nome: "P.N. do Boqueirão da Onça", uf: "BA", regiao: "Nordeste", lat: -9.4167, lng: -40.5000, hectares: "347.557 ha" },
+            { id: 48, nome: "P.N. do Cabo Orange", uf: "AP", regiao: "Norte", lat: 3.8333, lng: -51.8333, hectares: "619.000 ha" },
+            { id: 49, nome: "P.N. do Caparaó", uf: "MG/ES", regiao: "Sudeste", lat: -20.4000, lng: -41.8333, hectares: "31.853 ha" },
+            { id: 50, nome: "P.N. do Catimbau", uf: "PE", regiao: "Nordeste", lat: -8.6167, lng: -37.1500, hectares: "62.294 ha" },
+            { id: 51, nome: "P.N. do Iguaçu", uf: "PR", regiao: "Sul", lat: -25.6122, lng: -54.4781, hectares: "185.262 ha" },
+            { id: 52, nome: "P.N. do Jamanxim", uf: "PA", regiao: "Norte", lat: -4.2761, lng: -55.9819, hectares: "909.970 ha" },
+            { id: 53, nome: "P.N. do Jaú", uf: "AM", regiao: "Norte", lat: -2.2536, lng: -62.6339, hectares: "2.272.000 ha" },
+            { id: 54, nome: "P.N. do Juruena", uf: "MT/AM", regiao: "Centro-Oeste", lat: -9.8761, lng: -56.0861, hectares: "1.958.203 ha" },
+            { id: 55, nome: "P.N. e Histórico do Monte Pascoal", uf: "BA", regiao: "Nordeste", lat: -16.8642, lng: -39.2708, hectares: "22.240 ha" },
+            { id: 56, nome: "P.N. do Monte Roraima", uf: "RR", regiao: "Norte", lat: 5.1900, lng: -60.7603, hectares: "116.000 ha" },
+            { id: 57, nome: "P.N. do Pantanal Matogrossense", uf: "MT", regiao: "Centro-Oeste", lat: -17.6903, lng: -57.4767, hectares: "135.606 ha" },
+            { id: 58, nome: "P.N. do Pau Brasil", uf: "BA", regiao: "Nordeste", lat: -16.4975, lng: -39.2811, hectares: "19.027 ha" },
+            { id: 59, nome: "P.N. do Pico da Neblina", uf: "AM", regiao: "Norte", lat: 0.8072, lng: -66.0042, hectares: "2.252.616 ha" },
+            { id: 60, nome: "P.N. do Rio Novo", uf: "AM", regiao: "Norte", lat: -4.3022, lng: -56.8783, hectares: "538.157 ha" },
+            { id: 61, nome: "P.N. do Superagui", uf: "PR", regiao: "Sul", lat: -25.3314, lng: -48.1558, hectares: "33.860 ha" },
+            { id: 62, nome: "P.N. do Viruá", uf: "RR", regiao: "Norte", lat: 1.8167, lng: -61.1167, hectares: "214.950 ha" },
+            { id: 63, nome: "P.N. Campos Amazônicos", uf: "RO/AM/MT", regiao: "Norte", lat: -8.4167, lng: -61.6667, hectares: "961.317 ha" },
+            { id: 64, nome: "P.N. dos Campos Ferruginosos", uf: "PA", regiao: "Norte", lat: -6.0667, lng: -49.9000, hectares: "79.029 ha" },
+            { id: 65, nome: "P.N. dos Campos Gerais", uf: "PR", regiao: "Sul", lat: -25.0950, lng: -50.1619, hectares: "21.298 ha" },
+            { id: 66, nome: "P.N. dos Lençóis Maranhenses", uf: "MA", regiao: "Nordeste", lat: -2.7486, lng: -42.8267, hectares: "156.584 ha" },
+            { id: 67, nome: "P.N. Grande Sertão Veredas", uf: "MG/BA", regiao: "Sudeste", lat: -15.1000, lng: -45.8164, hectares: "230.853 ha" },
+            { id: 68, nome: "P.N. Guaricana", uf: "PR", regiao: "Sul", lat: -25.5333, lng: -49.2000, hectares: "49.286 ha" },
+            { id: 69, nome: "P.N. Mapinguari", uf: "RO/AM", regiao: "Norte", lat: -8.7011, lng: -64.3303, hectares: "1.776.914 ha" },
+            { id: 70, nome: "P.N. Marinho das Ilhas dos Currais", uf: "PR", regiao: "Sul", lat: -25.8167, lng: -48.5333, hectares: "1.359 ha" },
+            { id: 71, nome: "P.N. Marinho de Fernando de Noronha", uf: "PE", regiao: "Nordeste", lat: -3.8517, lng: -32.4425, hectares: "10.927 ha" },
+            { id: 72, nome: "P.N. Marinho dos Abrolhos", uf: "BA", regiao: "Nordeste", lat: -17.7833, lng: -38.8167, hectares: "87.943 ha" },
+            { id: 73, nome: "P.N. Montanhas do Tumucumaque", uf: "AP/PA", regiao: "Norte", lat: 0.0333, lng: -51.0500, hectares: "3.865.188 ha" },
+            { id: 74, nome: "P.N. Nascentes do Lago Jari", uf: "AM", regiao: "Norte", lat: -7.5000, lng: -63.0167, hectares: "808.604 ha" },
+            { id: 75, nome: "P.N. Serra da Mocidade", uf: "RR", regiao: "Norte", lat: 1.1492, lng: -61.8875, hectares: "376.812 ha" },
+            { id: 76, nome: "P.N. Serra de Itabaiana", uf: "SE", regiao: "Nordeste", lat: -10.4000, lng: -37.4000, hectares: "8.024 ha" }
+        ];
+
+        // 2. VARIÁVEIS DE ESTADO
+        let map;
+        let markersMap = new Map(); // Guarda marcadores por ID
+        let selectedRegion = 'TODAS';
+        let isSatellite = false;
+        let streetTileLayer, satelliteTileLayer;
+        let selectedParkId = null;
+
+        // Limites aproximados do Brasil para o Enquadramento
+        const BRAZIL_BOUNDS = [
+            [-33.75, -73.98], // Sudoeste
+            [5.27, -34.79]    // Nordeste
+        ];
+
+        // 3. INICIALIZAÇÃO DO MAPA
+        window.onload = function() {
+            // Cria mapa centrado no Brasil
+            map = L.map('map', {
+                center: [-14.235, -51.925],
+                zoom: 4,
+                zoomControl: false
+            });
+
+            // Adiciona controle de Zoom no canto inferior direito
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            // Camadas de Tile
+            streetTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            });
+
+            satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri'
+            });
+
+            // Ativa camada padrão
+            streetTileLayer.addTo(map);
+
+            // Renderiza pontos e lista
+            renderMapMarkers();
+            renderParksList(parques);
+
+            // Força ajuste no layout do mapa após o carregamento
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
+        };
+
+        // 4. DESENHA MARCADORES NO MAPA COM ANCORAGEM FIXA
+        function renderMapMarkers() {
+            // Ícone verde de pulso contínuo com ancoragem precisa no centro (7, 7)
+            const iconeVerde = L.divIcon({
+                className: 'ponto-piscando-container',
+                html: '<div class="ponto-piscando"></div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+                popupAnchor: [0, -8]
+            });
+
+            parques.forEach(parque => {
+                const marker = L.marker([parque.lat, parque.lng], { icon: iconeVerde });
+
+                // Tooltip simples no hover
+                marker.bindTooltip(parque.nome, {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -8],
+                    className: 'custom-tooltip'
+                });
+
+                // Conteúdo do Popup Estilizado
+                const popupContent = `
+                    <div class="text-slate-800">
+                        <div class="flex items-center gap-1.5 mb-1 text-xs font-semibold text-emerald-700">
+                            <i class="fa-solid fa-tree"></i>
+                            <span>${parque.regiao} • ESTADO: ${parque.uf}</span>
+                        </div>
+                        <h3 class="font-bold text-sm text-slate-900 mb-1 leading-snug">${parque.nome}</h3>
+                        <p class="text-[11px] text-emerald-800 font-semibold mb-1">
+                            <i class="fa-solid fa-ruler-combined mr-1"></i>Área: ${parque.hectares}
+                        </p>
+                        <p class="text-xs text-slate-500 mb-3">
+                            <i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>
+                            Coordenadas: ${parque.lat.toFixed(4)}, ${parque.lng.toFixed(4)}
+                        </p>
+                        <a href="https://parquesnacionaisinterculturais.ning.com/" target="_blank" 
+                           class="inline-flex items-center justify-center gap-2 w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-bold rounded-lg transition shadow-sm">
+                            <span>Ler Artigos</span>
+                            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                        </a>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+
+                // Adiciona evento de clique no marcador para sincronizar com a lista lateral
+                marker.on('click', () => {
+                    selectPark(parque.id);
+                });
+
+                marker.addTo(map);
+                markersMap.set(parque.id, marker);
+            });
+        }
+
+        // 5. RENDERIZA A LISTA LATERAL (AGRUPADA POR REGIÕES)
+        function renderParksList(items) {
+            const container = document.getElementById('parks-list');
+            container.innerHTML = '';
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400">
+                        <i class="fa-solid fa-tree-city text-3xl mb-2"></i>
+                        <p class="text-sm font-medium">Nenhum parque encontrado</p>
+                    </div>
+                `;
+                document.getElementById('list-count-badge').innerText = '0';
+                document.getElementById('stat-count').innerText = '0';
+                return;
+            }
+
+            document.getElementById('list-count-badge').innerText = items.length;
+            document.getElementById('stat-count').innerText = items.length;
+
+            // Agrupa os parques por região
+            const ordemRegioes = ['Norte', 'Nordeste', 'Centro-Oeste', 'Sudeste', 'Sul'];
+            
+            ordemRegioes.forEach(regiao => {
+                const parquesDaRegiao = items.filter(p => p.regiao === regiao);
+                
+                if (parquesDaRegiao.length > 0) {
+                    // Header de cada Região
+                    const regionHeader = document.createElement('div');
+                    regionHeader.className = "sticky top-0 z-10 bg-emerald-800 text-white text-xs font-bold px-3 py-1.5 rounded-md my-2 flex justify-between items-center shadow-sm";
+                    regionHeader.innerHTML = `
+                        <span class="flex items-center gap-1.5">
+                            <i class="fa-solid fa-compass text-emerald-300"></i> Região ${regiao}
+                        </span>
+                        <span class="bg-emerald-900/80 text-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-extrabold">${parquesDaRegiao.length}</span>
+                    `;
+                    container.appendChild(regionHeader);
+
+                    // Parques pertencentes a essa Região
+                    parquesDaRegiao.forEach(parque => {
+                        const card = document.createElement('div');
+                        card.id = `park-card-${parque.id}`;
+                        card.className = `p-3 bg-white hover:bg-emerald-50/60 border border-slate-200 rounded-lg cursor-pointer transition shadow-sm hover:border-emerald-300 flex items-center justify-between group my-1.5`;
+                        card.onclick = () => selectPark(parque.id);
+
+                        card.innerHTML = `
+                            <div>
+                                <h4 class="font-semibold text-xs sm:text-sm text-slate-800 group-hover:text-emerald-800 transition">${parque.nome}</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">${parque.uf}</span>
+                                    <span class="text-[11px] text-slate-500 font-medium"><i class="fa-solid fa-ruler-combined text-[10px] mr-1 text-emerald-600"></i>${parque.hectares}</span>
+                                </div>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-xs text-slate-300 group-hover:text-emerald-600 transition group-hover:translate-x-0.5"></i>
+                        `;
+
+                        container.appendChild(card);
+                    });
+                }
+            });
+        }
+
+        // 6. SELECIONA UM PARQUE (Ação do Usuário)
+        function selectPark(id) {
+            const parque = parques.find(p => p.id === id);
+            if (!parque) return;
+
+            selectedParkId = id;
+
+            // Foca o mapa no ponto do parque
+            map.flyTo([parque.lat, parque.lng], 8, {
+                animate: true,
+                duration: 1.2
+            });
+
+            // Destaca o marcador no mapa sem deslocar a posição central do marcador
+            markersMap.forEach((marker, markerId) => {
+                const el = marker.getElement();
+                if (el) {
+                    const innerElem = el.querySelector('.ponto-piscando');
+                    if (innerElem) {
+                        if (markerId === id) {
+                            innerElem.classList.add('destaque');
+                        } else {
+                            innerElem.classList.remove('destaque');
+                        }
+                    }
+                }
+            });
+
+            // Abre o popup do marcador
+            const marker = markersMap.get(id);
+            if (marker) {
+                setTimeout(() => {
+                    marker.openPopup();
+                }, 400);
+            }
+
+            // Destaca o card na lista lateral
+            highlightParkInList(id);
+
+            // Em telas pequenas (mobile), recolhe a sidebar ao selecionar um parque
+            if (window.innerWidth < 1024) {
+                toggleSidebar(false);
+            }
+        }
+
+        // Highlight na lista
+        function highlightParkInList(id) {
+            document.querySelectorAll('#parks-list > div').forEach(card => {
+                card.classList.remove('bg-emerald-100/70', 'border-emerald-500', 'ring-1', 'ring-emerald-500');
+            });
+
+            const selectedCard = document.getElementById(`park-card-${id}`);
+            if (selectedCard) {
+                selectedCard.classList.add('bg-emerald-100/70', 'border-emerald-500', 'ring-1', 'ring-emerald-500');
+                selectedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        // 7. FILTRAGEM (BUSCA E REGIÃO)
+        function filterParques() {
+            const searchValue = document.getElementById('search-input').value.toLowerCase().trim();
+            const clearBtn = document.getElementById('btn-clear-search');
+
+            if (searchValue.length > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+
+            const filtered = parques.filter(parque => {
+                const matchesSearch = parque.nome.toLowerCase().includes(searchValue) || 
+                                      parque.uf.toLowerCase().includes(searchValue);
+                const matchesRegion = selectedRegion === 'TODAS' || parque.regiao === selectedRegion;
+
+                return matchesSearch && matchesRegion;
+            });
+
+            // Atualiza visibilidade dos marcadores no mapa
+            markersMap.forEach((marker, id) => {
+                const isVisible = filtered.some(p => p.id === id);
+                if (isVisible) {
+                    if (!map.hasLayer(marker)) map.addLayer(marker);
+                } else {
+                    if (map.hasLayer(marker)) map.removeLayer(marker);
+                }
+            });
+
+            // Atualiza a lista lateral
+            renderParksList(filtered);
+        }
+
+        function setRegionFilter(region) {
+            selectedRegion = region;
+
+            // Atualiza botões
+            document.querySelectorAll('.region-btn').forEach(btn => {
+                if (btn.innerText.includes(region) || (region === 'TODAS' && btn.innerText === 'Todas') || (region === 'Centro-Oeste' && btn.innerText === 'C.Oeste')) {
+                    btn.className = "region-btn active text-xs px-2.5 py-1 rounded-md border font-medium transition bg-emerald-700 text-white border-emerald-700";
+                } else {
+                    btn.className = "region-btn text-xs px-2.5 py-1 rounded-md border font-medium transition bg-white text-slate-600 border-slate-200 hover:bg-slate-100";
+                }
+            });
+
+            filterParques();
+        }
+
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            filterParques();
+        }
+
+        // 8. REDEFINIR VISÃO DO MAPA
+        function resetMapView() {
+            map.fitBounds(BRAZIL_BOUNDS);
+            
+            // Remove destaque
+            markersMap.forEach((marker) => {
+                const el = marker.getElement();
+                if (el) {
+                    const innerElem = el.querySelector('.ponto-piscando');
+                    if (innerElem) innerElem.classList.remove('destaque');
+                }
+            });
+
+            map.closePopup();
+        }
+
+        // 9. TOGGLE DE CAMADA DO MAPA (RUA / SATÉLITE)
+        function toggleTileLayer() {
+            const btnText = document.getElementById('layer-btn-text');
+            if (isSatellite) {
+                map.removeLayer(satelliteTileLayer);
+                streetTileLayer.addTo(map);
+                btnText.innerText = 'Visão Satélite';
+            } else {
+                map.removeLayer(streetTileLayer);
+                satelliteTileLayer.addTo(map);
+                btnText.innerText = 'Visão Mapa';
+            }
+            isSatellite = !isSatellite;
+        }
+
+        // 10. CONTROLE DA SIDEBAR RESPONSIVA (MOBILE)
+        function toggleSidebar(forceState) {
+            const sidebar = document.getElementById('sidebar');
+            if (forceState !== undefined) {
+                if (forceState) {
+                    sidebar.classList.remove('-translate-x-full');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                }
+            } else {
+                sidebar.classList.toggle('-translate-x-full');
+            }
+        }
+    </script>
+</body>
+</html>
