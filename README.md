@@ -20,3 +20,6 @@ Projeto de Extensão e Cultura UFABC. Uma rede social e mapa interativo para os 
 - HTML5 / CSS3 (Tailwind CSS via CDN)
 - JavaScript (Vanilla)
 - Leaflet (Mapas)
+
+### 🌐 Acesse o site no ar:
+👉 **[Clique aqui para ver o site em construção](https://parques-nacionais-ufabc.netlify.app)**
